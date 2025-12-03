@@ -29,6 +29,6 @@ void acc_controller_init(void);
 
 // float compute_DC_offset(int num_samples);
 
-bool update_gyr_data(Acc_Datapoint_Float* gyr_data_out, bool lp);
+bool update_gyr_data(Acc_Datapoint_Float* gyr_data_out, bool lp, float* volume);
 
 #endif /* INC_ACC_CONTROLLER_H_ */

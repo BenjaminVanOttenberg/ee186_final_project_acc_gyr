@@ -1,8 +1,9 @@
 ../Core/Src/acc_controller.c:38:6:biquad_init_lowpass	80	static
-../Core/Src/acc_controller.c:62:7:biquad_process	24	static
-../Core/Src/acc_controller.c:70:6:lpf_init	16	static
-../Core/Src/acc_controller.c:74:7:compute_DC_offset	32	static
-../Core/Src/acc_controller.c:87:6:acc_controller_init	8	static
-../Core/Src/acc_controller.c:123:7:moving_average	32	static
-../Core/Src/acc_controller.c:140:6:turning_logic	40	static
-../Core/Src/acc_controller.c:161:6:update_gyr_data	16	static
+../Core/Src/acc_controller.c:66:7:biquad_process	24	static
+../Core/Src/acc_controller.c:96:6:lpf_init	16	static
+../Core/Src/acc_controller.c:100:7:compute_DC_offset	32	static
+../Core/Src/acc_controller.c:113:6:acc_controller_init	8	static
+../Core/Src/acc_controller.c:147:7:moving_average	32	static
+../Core/Src/acc_controller.c:162:7:moving_average_turning	32	static
+../Core/Src/acc_controller.c:180:6:turning_logic	40	static
+../Core/Src/acc_controller.c:223:6:update_gyr_data	24	static

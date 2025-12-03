@@ -39,7 +39,8 @@ void biquad_init_lowpass(BiquadLP *b, float cutoff_hz, float fs_hz) {
     float w0 = 2.0f * M_PI * cutoff_hz / fs_hz;
     float cosw = cosf(w0);
     float sinw = sinf(w0);
-    float Q = 0.707106f;
+    float Q = 0.707106f; // allegedly critically damped
+    // Q += 0.01f; // underdamped to purposely produce oscillations
     float alpha = sinw / (2.0f * Q);
 
     float b0 = (1.0f - cosw) / 2.0f;
@@ -59,10 +60,35 @@ void biquad_init_lowpass(BiquadLP *b, float cutoff_hz, float fs_hz) {
     b->z2 = 0.0f;
 }
 
+#define LEAK 0.005f
+#define F_LEAK_THESHOLD 0.01f
+#define F_LEAK 0.1f
 float biquad_process(BiquadLP *b, float x) {
+	// run a low pass filter
     float y = b->b0 * x + b->z1;
     b->z1 = b->b1 * x - b->a1 * y + b->z2;
     b->z2 = b->b2 * x - b->a2 * y;
+
+    // leaky integrator to account for sensor drift
+    b->z1 *= (1.0f - LEAK);
+    b->z2 *= (1.0f - LEAK);
+
+    // add a fast leak mode for when there's a spike so it doesn't trigger a turn signal
+    if (fabs(y) >= F_LEAK_THESHOLD) {
+    	b->z1 *= (1.0f - F_LEAK);
+    	b->z2 *= (1.0f - F_LEAK);
+    }
+
+    if (fabs(y) >= 0.02) {
+        	b->z1 *= 0.5;
+        	b->z2 *= 0.5;
+        }
+
+//    if (fabs(y) >= F_LEAK_THESHOLD) {
+//        	b->z1 *= F_LEAK_THESHOLD / fabs(y);
+//        	b->z2 *= F_LEAK_THESHOLD / fabs(y);
+//    }
+
     return y;
 }
 
@@ -114,11 +140,9 @@ void acc_controller_init(void) {
 //
 
 
-#define AVG_WINDOW 15
-float acc1_y_moving_average_buf[AVG_WINDOW];
-float acc2_y_moving_average_buf[AVG_WINDOW];
-int acc1_y_moving_average_i = 0;
-int acc2_y_moving_average_i = 0;
+#define AVG_WINDOW 50
+float volume_buf[AVG_WINDOW];
+int volume_i = 0;
 
 float moving_average(float* buf, int* i, float data_point) {
 	buf[*i] = data_point;
@@ -131,57 +155,82 @@ float moving_average(float* buf, int* i, float data_point) {
 	return result;
 }
 
-#define TURNING_BUF_WINDOW 5
-float turning_buf[TURNING_BUF_WINDOW];
+
+
+#define TURNING_WINDOW 35
+
+float moving_average_turning(float* buf, int* i, float data_point) {
+	buf[*i] = data_point;
+	*i = (*i + 1) % TURNING_WINDOW;
+	float result = 0;
+	for (int j = 0; j < TURNING_WINDOW; j++) {
+		result += buf[j];
+	}
+	result = result / TURNING_WINDOW;
+	return result;
+}
+
+float turning_buf[TURNING_WINDOW];
 int turning_i = 0;
 
-#define TURNING_THRESHOLD 0.001
+#define TURNING_THRESHOLD 0.004
+#define TURNING_WINDOW_MARGIN 5
+#define TURN_HOLD_CYCLES 20
 
-bool turning_logic(float val) {
-	static float turning_avg;
-	static bool turning;
-	turning_avg = moving_average(turning_buf, &turning_i, val);
-	turning = (fabs(turning_avg) > TURNING_THRESHOLD) ? 1 : 0;
+bool turning_logic(float val,  float* volume) {
+	 static float turning_avg;
+	 static bool turning;
+	 turning_avg = moving_average_turning(turning_buf, &turning_i, val);
+	 turning = (fabs(turning_avg) > TURNING_THRESHOLD) ? 1 : 0;
+
+	static bool crosses_threshold;
+	int above = 0; int below = 0;
+	for (int j = 0; j < TURNING_WINDOW; j++) {
+		if (turning_buf[j] > TURNING_THRESHOLD) above++;
+		if (turning_buf[j] < -TURNING_THRESHOLD) below++;
+	}
+	crosses_threshold = (above >= TURNING_WINDOW-TURNING_WINDOW_MARGIN || below >= TURNING_WINDOW-TURNING_WINDOW_MARGIN) ? 0 : 1;
 
 	static bool crosses_zero;
-
-	int above = 0; int below = 0;
-	for (int j = 0; j < TURNING_BUF_WINDOW; j++) {
+	above = 0; below = 0;
+	for (int j = 0; j < TURNING_WINDOW; j++) {
 		if (turning_buf[j] > 0) above++;
 		if (turning_buf[j] < 0) below++;
 	}
-	crosses_zero = (above == TURNING_BUF_WINDOW || below == TURNING_BUF_WINDOW) ? 0 : 1;
-	return turning & !crosses_zero;
-	return turning;
+	crosses_zero = (above == TURNING_WINDOW || below == TURNING_WINDOW) ? 0 : 1;
+
+	static bool turn_trigger;
+	turn_trigger = !crosses_threshold * !crosses_zero;
+
+
+	*volume = moving_average(volume_buf, &volume_i, turn_trigger ? 1.0f : 0);
+	turn_trigger = (*volume > 0.3 ? 1 : 0);
+
+	static int hold_counter = 0;
+		if (turn_trigger) {
+			hold_counter = TURN_HOLD_CYCLES;   // reset hold when turning detected
+		} else {
+			if (hold_counter > 0) hold_counter--;
+		}
+		turn_trigger = (hold_counter > 0);
+	return turn_trigger;
+	//return turn_trigger;
 }
 
 
 
 // int calibrate_after = 1000;
-bool update_gyr_data(Acc_Datapoint_Float* gyr_data_out, bool lp) {
+bool update_gyr_data(Acc_Datapoint_Float* gyr_data_out, bool lp, float* volume) {
 	sample_converted_acc_data(&hi2c1, &acc1_data);
-	// acc1_data.y = moving_average(acc1_y_moving_average_buf, &acc1_y_moving_average_i, acc1_data.y);
 	sample_converted_acc_data(&hi2c2, &acc2_data);
-	// acc2_data.y = moving_average(acc2_y_moving_average_buf, &acc2_y_moving_average_i, acc2_data.y);
-
-	// acc_diff_data.x = acc1_data.x - acc2_data.x;
 	acc_diff_data.y = acc1_data.y - acc2_data.y - DC_offset;
-	// acc_diff_data.z = acc1_data.z - acc2_data.z;
 
-	// low pass filter first order
-//	if (!gyr_lpf_initialized) {
-//		    gyr_lpf = acc_diff_data;
-//		    gyr_lpf_initialized = true;
-//	}
-	// gyr_lpf.y = acc_diff_data.y + LPF_ALPHA * (gyr_lpf.y - acc_diff_data.y);
+	// acc_diff_data.y = moving_average(gyr_window_buf, &gyr_window_i, acc_diff_data.y);
+
 
 	gyr_lpf.y = lp ? biquad_process(&gy_lp, acc_diff_data.y) : acc_diff_data.y;
 	static bool turning;
-	turning = turning_logic(gyr_lpf.y);
-
-
-
-	// gyr_lpf.y = acc_diff_data.y;
+	turning = turning_logic(gyr_lpf.y, volume);
 
 	// set to difference acc for now
 	// *gyr_data_out = acc_diff_data;

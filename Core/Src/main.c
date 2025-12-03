@@ -127,15 +127,16 @@ int main(void)
   // acc_controller_calibration();
 //  float acc_diff_DC_error = compute_DC_offset(500);
 //  float turning_signal = 0;
+  float volume = 0;
 
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	turning = update_gyr_data(&gyr_data, 1);
+	turning = update_gyr_data(&gyr_data, 0, &volume);
 	gyr_data.z = turning ? 1 : 0;
-	printf("x: %f, y: %f, z: %f\r\n", 0.0f, gyr_data.y, gyr_data.z);
+	printf("x: %f, y: %f, z: %f\r\n", volume / 10.0f, gyr_data.y, gyr_data.z / 10.0f);
 	// printf("y: %f\r\n", gyr_data.y);
   }
   /* USER CODE END 3 */
