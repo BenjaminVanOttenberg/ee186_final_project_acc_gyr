@@ -40,7 +40,7 @@ void biquad_init_lowpass(BiquadLP *b, float cutoff_hz, float fs_hz) {
     float cosw = cosf(w0);
     float sinw = sinf(w0);
     float Q = 0.707106f; // allegedly critically damped
-    // Q += 0.01f; // underdamped to purposely produce oscillations
+    // Q += 0.01f; // underdamped to purposely produce oscillations, warning: this was a terrible idea
     float alpha = sinw / (2.0f * Q);
 
     float b0 = (1.0f - cosw) / 2.0f;
@@ -236,5 +236,11 @@ bool update_gyr_data(Acc_Datapoint_Float* gyr_data_out, bool lp, float* volume) 
 	// *gyr_data_out = acc_diff_data;
 	*gyr_data_out = gyr_lpf;
 	return turning;
+}
+
+bool update_gyr_data_just_enable() {
+	static Acc_Datapoint_Float _1;
+	static float _2;
+	return update_gyr_data(&_1, 1, &_2);
 }
 

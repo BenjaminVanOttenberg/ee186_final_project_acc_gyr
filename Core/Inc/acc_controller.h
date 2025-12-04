@@ -31,4 +31,7 @@ void acc_controller_init(void);
 
 bool update_gyr_data(Acc_Datapoint_Float* gyr_data_out, bool lp, float* volume);
 
+// wrapper for just getting the enable line
+bool update_gyr_data_just_enable();
+
 #endif /* INC_ACC_CONTROLLER_H_ */

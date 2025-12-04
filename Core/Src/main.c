@@ -134,7 +134,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	turning = update_gyr_data(&gyr_data, 0, &volume);
+	turning = update_gyr_data(&gyr_data, 1, &volume);
 	gyr_data.z = turning ? 1 : 0;
 	printf("x: %f, y: %f, z: %f\r\n", volume / 10.0f, gyr_data.y, gyr_data.z / 10.0f);
 	// printf("y: %f\r\n", gyr_data.y);
